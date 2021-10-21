@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         theHandy support for PornHub
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  PH support for the Handy
 // @author       Nodude
 // @match        https://*.pornhub.com/view_video.php?viewkey=*
@@ -13,6 +13,9 @@
 //Inspired by notSafeForDev
 
 /*
+Update 1.3
+Added seek support
+Backported changes from jabiim
 Update 1.2
 Added offset support
 Update 1.1
@@ -206,8 +209,14 @@ class Hander {
     }
 
     async function init() {
+        window.addEventListener("beforeunload", function(e){
+            if (shouldHand()) {
+                hand.onPause();
+            }
+        }, false);
+
         //User config
-        const selecting = document.createElement("div");
+        /*const selecting = document.createElement("div");
         selecting.style.padding = "20px";
 
         selecting.innerHTML += '<svg height="100" width="100" style="position:absolute; right:0px;"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" id="rdycrl" fill="red" /></svg>';
@@ -235,7 +244,56 @@ class Hander {
 
         var stats = document.createElement("a");
         stats.id="state";
+        selecting.appendChild(stats);*/
+
+        //User config
+        const selecting = document.createElement("div");
+        selecting.style.padding = "20px";
+
+        selecting.innerHTML += '<svg height="100" width="100" style="position:absolute; right:0px;"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" id="rdycrl" fill="red" /></svg>';
+
+        const finputText = document.createElement("input");
+        finputText.type = "file";
+        finputText.placeholder = "Select a file";
+        finputText.style.marginTop = '4px';
+        finputText.style.marginBottom = '4px';
+        finputText.style.display = 'block';
+
+        const inputText = document.createElement("input");
+        inputText.className = 'input-text';
+        inputText.style.width = '200px';
+        inputText.style.marginBottom = '4px';
+        inputText.type = "text";
+        inputText.value = handyKey;
+        inputText.placeholder = "Enter connection key";
+        inputText.style.display = 'block';
+
+        const uploadButton = document.createElement("input");
+        uploadButton.className = 'submit-comment xh-button large red'
+        uploadButton.style.marginBottom = '4px';
+        uploadButton.type = 'button';
+        uploadButton.value = "Upload to handy";
+        uploadButton.disabled = true;
+        uploadButton.style.display = 'block';
+
+        selecting.appendChild(inputText);
+
+        selecting.appendChild(finputText);
+
+
+        const inputOffset = document.createElement("label");
+        inputOffset.innerHTML += 'Offset:<input class="input-text" style="display: inline-block; width: 200px; margin-left: 4px" type="number" name="Offset" value="0"><span> ms</span></label>';
+        selecting.appendChild(inputOffset);
+
+        selecting.appendChild(uploadButton);
+
+        const inputOffsetI = inputOffset.getElementsByTagName("input")[0];
+        inputOffsetI.style.marginBottom = '4px';
+
+        var stats = document.createElement("a");
+        stats.id="state";
         selecting.appendChild(stats);
+
 
         document.getElementsByClassName("video-actions-container")[0].prepend(selecting);
 
@@ -252,6 +310,43 @@ class Hander {
                 hand.setOffset(inputOffsetI.value);
             }
         });
+
+        inputText.addEventListener("blur", function(event) {
+            handyKey = inputText.value;
+            GM_setValue('handy_key', handyKey);
+            if (scriptUrl && handyKey) {
+                uploadButton.disabled = false;
+            } else {
+                uploadButton.disabled = true;
+            }
+        });
+        inputText.addEventListener("keyup", function(event) {
+            // Number 13 is the "Enter" key on the keyboard
+            if (event.keyCode === 13) {
+                // Cancel the default action, if needed
+                event.preventDefault();
+                handyKey = inputText.value;
+                GM_setValue('handy_key', handyKey);
+                console.log(scriptUrl);
+                if (scriptUrl) {
+                    uploadButton.disabled = false;
+                } else {
+                    uploadButton.disabled = true;
+                }
+            }
+        });
+
+        uploadButton.addEventListener("click", function(event) {
+            event.preventDefault();
+            hand.onReady(handyKey, scriptUrl);
+        });
+
+        /*inputOffsetI.addEventListener("keyup", function(event) {
+            if (event.keyCode === 13) {
+                event.preventDefault();
+                hand.setOffset(inputOffsetI.value);
+            }
+        });
         inputText.addEventListener("keyup", function(event) {
             // Number 13 is the "Enter" key on the keyboard
             if (event.keyCode === 13) {
@@ -260,7 +355,9 @@ class Hander {
                 handyKey = inputText.value;
                 hand.onReady(handyKey, scriptUrl);
             }
-        });
+        });*/
+
+
         finputText.addEventListener("change", function(event) {
             var files = event.target.files; // FileList object
 
@@ -280,9 +377,14 @@ class Hander {
                     var context = response.context || this.context || context;
                     var jsonResponse = response.responseText;
                     if (response.status == 200) {
-                        document.getElementById("state").innerHTML += "<li>Script Uploaded!</li>";
+                        document.getElementById("state").innerHTML += "<li>Script Uploaded to Handy Servers!</li>";
                         scriptUrl = JSON.parse(jsonResponse).url;
-                        inputText.disabled = false;
+                        console.log(handyKey);
+                        if (handyKey) {
+                            uploadButton.disabled = false;
+                        } else {
+                            uploadButton.disabled = true;
+                        }
                     } else {
                         document.getElementById("state").innerHTML += "<li>Error " + response.status + " occurred when trying to upload your file.</li>";
                     }
@@ -294,7 +396,14 @@ class Hander {
         }, false);
 
         videoObj.addEventListener("play", onplay);
+        videoObj.addEventListener("playing", onplay);
+        videoObj.addEventListener("progress", onplay);
+
+        videoObj.addEventListener("seeked", onplay);
+        videoObj.addEventListener("seeking", onpause);
+
         videoObj.addEventListener("pause", onpause);
+        videoObj.addEventListener("waiting", onpause);
 
         console.log("Done!");
     }
